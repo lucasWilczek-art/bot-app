@@ -142,10 +142,14 @@
   var KANAL = "__STATUS_KANAL__", ANTWORT = "__ANTWORT_KANAL__";
   var LS = "bvbot_kanal", LSA = "bvbot_antwort";
   function store(k, v){ try{ if(v===undefined) return localStorage.getItem(k); localStorage.setItem(k, v);}catch(e){ return null; } }
-  var hk = location.hash.match(/k=([A-Za-z0-9_-]+)/), ha = location.hash.match(/a=([A-Za-z0-9_-]+)/);
+  // Kanaele aus der Adresse (#k=..&a=.. oder ?k=..&a=..). Sie bleiben in der Adresse stehen,
+  // damit ein Symbol auf dem iPhone-Startbildschirm sie mitnimmt (eigener Speicher!).
+  var src = location.hash + "&" + location.search;
+  var hk = src.match(/[#&?]k=([A-Za-z0-9_-]+)/), ha = src.match(/[#&?]a=([A-Za-z0-9_-]+)/);
   if (hk) store(LS, hk[1]);
   if (ha) store(LSA, ha[1]);
-  if (hk || ha) history.replaceState(null, "", location.pathname);
+  if (hk && KANAL.indexOf("__") === 0) KANAL = hk[1];
+  if (ha && (ANTWORT.indexOf("__") === 0 || !ANTWORT)) ANTWORT = ha[1];
   if (KANAL.indexOf("__") === 0) KANAL = store(LS) || "";
   if (ANTWORT.indexOf("__") === 0 || !ANTWORT) ANTWORT = store(LSA) || "";
 
