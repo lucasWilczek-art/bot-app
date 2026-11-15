@@ -77,6 +77,14 @@
   .msg.new{animation:nw 2.5s ease-out}
   @keyframes nw{0%{background:rgba(47,191,113,.22)}100%{background:#11161c}}
   .sub{color:var(--mut);font-size:12px;font-weight:400;text-transform:none;letter-spacing:0;margin-left:6px}
+  .btn{appearance:none;border:0;border-radius:9px;padding:10px 14px;font:inherit;font-weight:650;cursor:pointer;color:#fff}
+  .btn.go{background:#238636} .btn.stop{background:#c93c37} .btn.neutral{background:#30363d}
+  .btn.armed{outline:2px solid #fff;outline-offset:2px;animation:arm .8s infinite alternate}
+  @keyframes arm{from{filter:brightness(1)}to{filter:brightness(1.35)}}
+  .btn[disabled]{opacity:.45;cursor:not-allowed}
+  .ctl{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  .note{color:var(--mut);font-size:12px;margin-top:8px}
+  .ok{color:var(--gr)}
   footer{color:var(--mut);font-size:12px;margin:18px 0 6px;line-height:1.6}
   .err{color:var(--rd);font-size:13px;margin-top:6px}
   @media (max-width:560px){.hide-s{display:none}.kpi .v{font-size:18px}}
@@ -105,13 +113,15 @@
     <div class="kpi"><div class="l">Ergebnis gesamt</div><div class="v" id="kGes">–</div></div>
   </div>
 
-  <div class="card"><h2>Die 11 Bots <span class="sub" id="botsSub"></span></h2><div class="bots" id="bots"></div></div>
+  <div class="card"><h2>Steuerung</h2><div class="ctl" id="ctl"></div><div class="note" id="ctlNote"></div></div>
 
-  <div class="card"><h2>So sprechen die Bots miteinander <span class="sub">neueste oben</span></h2><div class="chat" id="chat"><div class="empty">Noch keine Nachrichten.</div></div></div>
+  <div class="card"><h2>Wartet auf deine Bestätigung</h2><div id="vor"><div class="empty">Kein Kaufvorschlag offen.</div></div></div>
 
   <div class="card"><h2>Offene Position</h2><div id="pos" class="posbox"><div class="empty">Keine offene Position.</div></div></div>
 
-  <div class="card"><h2>Wartet auf deine Bestätigung</h2><div id="vor"><div class="empty">Kein Kaufvorschlag offen.</div></div></div>
+  <div class="card"><h2>Die 11 Bots <span class="sub" id="botsSub"></span></h2><div class="bots" id="bots"></div></div>
+
+  <div class="card"><h2>So sprechen die Bots miteinander <span class="sub">neueste oben</span></h2><div class="chat" id="chat"><div class="empty">Noch keine Nachrichten.</div></div></div>
 
   <div class="card"><h2>Letzte Signale</h2><div id="sig"><div class="empty">Noch keine Signale.</div></div></div>
 
@@ -129,14 +139,15 @@
 (function(){
   "use strict";
   var SERVER = "__NTFY_SERVER__".indexOf("__") === 0 ? "https://ntfy.sh" : "__NTFY_SERVER__";
-  var KANAL = "__STATUS_KANAL__";
-  var LS = "bvbot_kanal";
+  var KANAL = "__STATUS_KANAL__", ANTWORT = "__ANTWORT_KANAL__";
+  var LS = "bvbot_kanal", LSA = "bvbot_antwort";
   function store(k, v){ try{ if(v===undefined) return localStorage.getItem(k); localStorage.setItem(k, v);}catch(e){ return null; } }
-  if (KANAL.indexOf("__") === 0) {
-    var h = location.hash.match(/k=([A-Za-z0-9_-]+)/);
-    if (h) { store(LS, h[1]); history.replaceState(null, "", location.pathname); }
-    KANAL = store(LS) || "";
-  }
+  var hk = location.hash.match(/k=([A-Za-z0-9_-]+)/), ha = location.hash.match(/a=([A-Za-z0-9_-]+)/);
+  if (hk) store(LS, hk[1]);
+  if (ha) store(LSA, ha[1]);
+  if (hk || ha) history.replaceState(null, "", location.pathname);
+  if (KANAL.indexOf("__") === 0) KANAL = store(LS) || "";
+  if (ANTWORT.indexOf("__") === 0 || !ANTWORT) ANTWORT = store(LSA) || "";
 
   var $ = function(id){ return document.getElementById(id); };
   var SETUPS = {breakout:"Ausbruch", ema_cross:"EMA-Kreuzung", rsi_bounce:"RSI-Erholung"};
@@ -211,6 +222,26 @@
     }).join("") : '<div class="empty">Noch keine Nachrichten – sie erscheinen, sobald der Scanner etwas findet.</div>';
     if (newest > seenFeed) seenFeed = newest;
   }
+  // ---------- Befehle an den Bot (ueber den geheimen Antwortkanal)
+  var armed = {}, sentMsg = "", sentUntil = 0;
+  function send(cmd, label){
+    if (!ANTWORT) return;
+    fetch(SERVER.replace(/\/$/,"") + "/" + encodeURIComponent(ANTWORT), {method:"POST", body:cmd})
+      .then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); sentMsg = "✓ "+label+" gesendet – der Bot führt es in ca. 1 Minute aus."; sentUntil = Date.now()+120000; render(); })
+      .catch(function(e){ sentMsg = "Senden fehlgeschlagen: "+(e.message||e); sentUntil = Date.now()+30000; render(); });
+  }
+  document.addEventListener("click", function(e){
+    var b = e.target.closest("button[data-cmd]"); if (!b || b.disabled) return;
+    var id = b.getAttribute("data-cmd");
+    if (armed[id] && armed[id] > Date.now()) { delete armed[id]; send(id, b.getAttribute("data-label")); }
+    else { armed = {}; armed[id] = Date.now() + 5000; }
+    render();
+  });
+  function btn(cmd, cls, text, label, dis){
+    var a = armed[cmd] && armed[cmd] > Date.now();
+    return '<button class="btn '+cls+(a?" armed":"")+'" data-cmd="'+esc(cmd)+'" data-label="'+esc(label)+'"'+(dis?" disabled":"")+'>'+(a?"Sicher? Nochmal tippen":text)+'</button>';
+  }
+
   // ---------- Anzeige
   function render(){
     var hero=$("hero"), T=$("heroT"), S=$("heroS");
@@ -231,6 +262,16 @@
     renderBots(aliveNow);
 
     $("kHandel").innerHTML = status.aktiv ? '<span class="pill g">AN</span>' : '<span class="pill r">AUS</span>';
+    if (!ANTWORT) {
+      $("ctl").innerHTML = ""; $("ctlNote").textContent = "Für die Knöpfe den neuen Link aus dem Chat einmal öffnen.";
+    } else {
+      $("ctl").innerHTML = status.aktiv ? btn("AUS","stop","Alles ausschalten","Ausschalten") +
+          '<span style="color:var(--mut);font-size:13px">Bot kauft dann nichts mehr. Offene Käufe behalten ihren Stop-Loss.</span>'
+        : btn("AN","go","Handel wieder einschalten","Einschalten") +
+          '<span style="color:var(--mut);font-size:13px">Handel ist aus – der Bot meldet nur noch.</span>';
+      $("ctlNote").innerHTML = (sentUntil > Date.now() ? '<span class="ok">'+esc(sentMsg)+'</span> ' : '') +
+        (aliveNow ? "" : "Bot ist gerade aus – der Befehl wird ausgeführt, sobald der PC wieder läuft.");
+    }
     $("kEur").textContent = status.eur==null ? "–" : eur(status.eur);
     var j = status.j || {};
     $("kHeute").innerHTML = '<span class="'+cls(j.heute)+'">'+sgn(j.heute,2)+' €</span>';
@@ -245,15 +286,17 @@
         '<div class="row" style="color:var(--mut);font-size:13px"><span>'+esc(p.menge)+' · Einstieg '+pr(p.e)+' · jetzt '+(live?pr(live):"–")+'</span><span>'+(pl==null?"":sgn(pl/p.k*100,1)+" %")+'</span></div>'+
         '<div class="bar"><div class="e" style="left:'+ep+'%"></div>'+(pos==null?"":'<div class="m" style="left:calc('+pos+'% - 1px)"></div>')+'</div>'+
         '<div class="barl"><span>Stop '+pr(lo)+'</span><span>Ziel '+pr(hi)+'</span></div>'+
-        '<div style="color:var(--mut);font-size:13px;margin-top:6px">Gekauft '+hm(p.seit)+' Uhr · verkauft spätestens in '+left(p.dl)+'</div></div>';
+        '<div style="color:var(--mut);font-size:13px;margin-top:6px">Gekauft '+hm(p.seit)+' Uhr · verkauft spätestens in '+left(p.dl)+'</div>'+
+        (ANTWORT ? '<div style="margin-top:10px">'+btn("VERKAUF-"+p.seit,"neutral","Jetzt verkaufen","Verkauf "+p.m, !aliveNow)+'</div>' : '')+'</div>';
     }).join("") : '<div class="empty">Keine offene Position.</div>';
 
     // Vorschlaege
     var aktivJetzt = !status.gestoppt && (Date.now()-status.t) <= Math.max(25,(status.status_min||10)*2.5)*60000;
     var V = aktivJetzt ? (status.vor||[]).filter(function(v){ return v.bis > Date.now(); }) : [];
     $("vor").innerHTML = V.length ? V.map(function(v){
-      return '<div class="row"><div><b>'+esc(v.m)+'</b> · '+(SETUPS[v.s]||esc(v.s))+'</div><div><span class="pill y">noch '+left(v.bis)+'</span></div></div>'+
-        '<div style="color:var(--mut);font-size:13px">Drück auf dem Handy KAUFEN, dann kauft der Bot selbst.</div>';
+      return '<div style="margin-bottom:10px"><div class="row"><div><b>'+esc(v.m)+'</b> · '+(SETUPS[v.s]||esc(v.s))+(v.eur?' · ca. '+eur(v.eur):'')+'</div><div><span class="pill y">noch '+left(v.bis)+'</span></div></div>'+
+        (ANTWORT && v.c ? '<div style="margin-top:8px">'+btn("KAUF-"+v.c,"go","KAUFEN bestätigen","Kauf "+v.m)+'</div>'
+          : '<div style="color:var(--mut);font-size:13px">Drück auf dem Handy KAUFEN, dann kauft der Bot selbst.</div>')+'</div>';
     }).join("") : '<div class="empty">'+(aktivJetzt ? 'Kein Kaufvorschlag offen.' : 'Bot ist aus – solange kommen keine Kaufvorschläge.')+'</div>';
 
     // Signale
