@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1014">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bot Live">
+<meta name="robots" content="noindex">
+<title>Bitvavo Bot – Live</title>
+<style>
+  :root{
+    --bg:#0d1014;--card:#161b22;--line:#242b35;--txt:#e6edf3;--mut:#8b949e;
+    --gr:#2fbf71;--gr-bg:rgba(47,191,113,.12);--rd:#f0524f;--rd-bg:rgba(240,82,79,.12);
+    --yl:#e3b341;--yl-bg:rgba(227,179,65,.12);--bl:#4c9aff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:960px;margin:0 auto;padding:16px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+  h1{font-size:18px;margin:0;font-weight:650;letter-spacing:.2px}
+  .clock{color:var(--mut);font-variant-numeric:tabular-nums;font-size:13px}
+  .hero{border-radius:14px;padding:16px 18px;margin-bottom:14px;display:flex;align-items:center;gap:14px;border:1px solid var(--line)}
+  .hero .dot{width:14px;height:14px;border-radius:50%;flex:none}
+  .hero.ok{background:var(--gr-bg);border-color:rgba(47,191,113,.35)} .hero.ok .dot{background:var(--gr);box-shadow:0 0 0 0 rgba(47,191,113,.6);animation:p 2s infinite}
+  .hero.off{background:var(--rd-bg);border-color:rgba(240,82,79,.35)} .hero.off .dot{background:var(--rd)}
+  .hero.wait{background:var(--yl-bg);border-color:rgba(227,179,65,.35)} .hero.wait .dot{background:var(--yl)}
+  @keyframes p{0%{box-shadow:0 0 0 0 rgba(47,191,113,.55)}70%{box-shadow:0 0 0 10px rgba(47,191,113,0)}100%{box-shadow:0 0 0 0 rgba(47,191,113,0)}}
+  .hero b{font-size:17px;display:block}
+  .hero small{color:var(--mut)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+  .kpi .l{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+  .kpi .v{font-size:20px;font-weight:650;margin-top:2px;font-variant-numeric:tabular-nums}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+  .card h2{font-size:14px;margin:0 0 10px;color:var(--mut);font-weight:600;text-transform:uppercase;letter-spacing:.6px}
+  .empty{color:var(--mut);font-size:14px}
+  table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+  th{color:var(--mut);font-weight:500;text-align:left;font-size:12px;padding:6px 6px;border-bottom:1px solid var(--line)}
+  td{padding:8px 6px;border-bottom:1px solid var(--line)}
+  tr:last-child td{border-bottom:none}
+  .r{text-align:right}
+  .pos{color:var(--gr)} .neg{color:var(--rd)}
+  .pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600}
+  .pill.g{background:var(--gr-bg);color:var(--gr)} .pill.r{background:var(--rd-bg);color:var(--rd)} .pill.y{background:var(--yl-bg);color:var(--yl)} .pill.b{background:rgba(76,154,255,.14);color:var(--bl)}
+  .posbox{display:grid;gap:8px}
+  .bar{position:relative;height:10px;border-radius:6px;background:linear-gradient(90deg,var(--rd-bg),#1f2630 50%,var(--gr-bg));margin:10px 0 4px}
+  .bar .m{position:absolute;top:-4px;width:3px;height:18px;border-radius:2px;background:var(--txt)}
+  .bar .e{position:absolute;top:-2px;width:2px;height:14px;background:var(--mut)}
+  .barl{display:flex;justify-content:space-between;color:var(--mut);font-size:12px}
+  .big{font-size:22px;font-weight:700}
+  .row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+  .tick{display:flex;flex-wrap:wrap;gap:6px}
+  .tick > span{background:#11161c;border:1px solid var(--line);border-radius:8px;padding:4px 8px;font-size:13px;font-variant-numeric:tabular-nums}
+  .setup{display:none}
+  .setup input{width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);background:#0b0e12;color:var(--txt);font:inherit}
+  .setup button{margin-top:8px;padding:9px 14px;border-radius:8px;border:0;background:var(--bl);color:#fff;font-weight:600;cursor:pointer}
+  footer{color:var(--mut);font-size:12px;margin:18px 0 6px;line-height:1.6}
+  .err{color:var(--rd);font-size:13px;margin-top:6px}
+  @media (max-width:560px){.hide-s{display:none}.kpi .v{font-size:18px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Bitvavo Bot · Live</h1>
+    <div class="clock" id="clock">–</div>
+  </header>
+
+  <div class="card setup" id="setup">
+    <h2>Einrichten</h2>
+    <div class="empty">Trage einmal den Namen deines Status-Kanals ein (steht am PC: <code>py bvtrader.py config</code> → ntfy_status_kanal). Er wird nur in diesem Browser gespeichert.</div>
+    <input id="kanal" placeholder="bvtrader-app-…" autocomplete="off">
+    <button id="save">Speichern</button>
+  </div>
+
+  <div class="hero wait" id="hero"><div class="dot"></div><div><b id="heroT">Verbinde …</b><small id="heroS">Warte auf das erste Lebenszeichen des Bots</small></div></div>
+
+  <div class="grid">
+    <div class="kpi"><div class="l">Handel</div><div class="v" id="kHandel">–</div></div>
+    <div class="kpi"><div class="l">EUR auf Bitvavo</div><div class="v" id="kEur">–</div></div>
+    <div class="kpi"><div class="l">Ergebnis heute</div><div class="v" id="kHeute">–</div></div>
+    <div class="kpi"><div class="l">Ergebnis gesamt</div><div class="v" id="kGes">–</div></div>
+  </div>
+
+  <div class="card"><h2>Offene Position</h2><div id="pos" class="posbox"><div class="empty">Keine offene Position.</div></div></div>
+
+  <div class="card"><h2>Wartet auf deine Bestätigung</h2><div id="vor"><div class="empty">Kein Kaufvorschlag offen.</div></div></div>
+
+  <div class="card"><h2>Letzte Signale</h2><div id="sig"><div class="empty">Noch keine Signale.</div></div></div>
+
+  <div class="card"><h2>Live-Kurse (Bitvavo)</h2><div class="tick" id="tick"><span>Lade …</span></div><div class="err" id="pErr"></div></div>
+
+  <div class="card"><h2>Letzte Trades</h2><div id="trades"><div class="empty">Noch keine Trades.</div></div></div>
+
+  <footer id="foot">
+    Kurse kommen live von Bitvavo (alle 10 s). Der Bot-Status kommt vom Monitor auf deinem PC: Er meldet sich alle paar Minuten und sofort bei Käufen, Verkäufen und Signalen.
+    Kommt länger nichts, ist der PC aus oder der Monitor gestoppt – ein offener Kauf bleibt dann durch den Stop-Loss bei Bitvavo geschützt.
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var SERVER = "__NTFY_SERVER__".indexOf("__") === 0 ? "https://ntfy.sh" : "__NTFY_SERVER__";
+  var KANAL = "__STATUS_KANAL__";
+  var LS = "bvbot_kanal";
+  function store(k, v){ try{ if(v===undefined) return localStorage.getItem(k); localStorage.setItem(k, v);}catch(e){ return null; } }
+  if (KANAL.indexOf("__") === 0) {
+    var h = location.hash.match(/k=([A-Za-z0-9_-]+)/);
+    if (h) { store(LS, h[1]); history.replaceState(null, "", location.pathname); }
+    KANAL = store(LS) || "";
+  }
+
+  var $ = function(id){ return document.getElementById(id); };
+  var SETUPS = {breakout:"Ausbruch", ema_cross:"EMA-Kreuzung", rsi_bounce:"RSI-Erholung"};
+  var status = null, prices = {}, changes = {}, lastStatusFetch = 0, statusErr = "";
+
+  function eur(x, d){ if (x == null || isNaN(x)) return "–"; return Number(x).toLocaleString("de-DE",{minimumFractionDigits:d==null?2:d,maximumFractionDigits:d==null?2:d}) + " €"; }
+  function pr(x){ if (x == null || isNaN(x)) return "–"; var a=Math.abs(x); var d = a>=1000?2:a>=1?4:6; return Number(x).toLocaleString("de-DE",{maximumFractionDigits:d,minimumFractionDigits:Math.min(2,d)}); }
+  function sgn(x, d){ if (x == null || isNaN(x)) return "–"; return (x>0?"+":"") + Number(x).toLocaleString("de-DE",{minimumFractionDigits:d,maximumFractionDigits:d}); }
+  function cls(x){ return x>0 ? "pos" : x<0 ? "neg" : ""; }
+  function ago(ms){ var s=Math.max(0,Math.round((Date.now()-ms)/1000)); if(s<60) return "vor "+s+" s"; var m=Math.round(s/60); if(m<60) return "vor "+m+" Min."; var h=Math.floor(m/60); return "vor "+h+" Std. "+(m%60)+" Min."; }
+  function left(ms){ var s=Math.max(0,Math.round((ms-Date.now())/1000)); var h=Math.floor(s/3600), m=Math.floor(s%3600/60), x=s%60; return h? h+" Std. "+m+" Min." : m+":"+(x<10?"0":"")+x+" Min."; }
+  function hm(ms){ var d=new Date(ms); return d.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}); }
+  function esc(t){ return String(t).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
+
+  // ---------- Daten holen
+  function fetchStatus(){
+    if (!KANAL) return;
+    fetch(SERVER.replace(/\/$/,"") + "/" + encodeURIComponent(KANAL) + "/json?poll=1&since=12h", {cache:"no-store"})
+      .then(function(r){ if(!r.ok) throw new Error("ntfy HTTP "+r.status); return r.text(); })
+      .then(function(t){
+        var lines = t.split("\n").filter(Boolean), last = null;
+        lines.forEach(function(l){ try{ var m = JSON.parse(l); if (m.event==="message" && m.message && m.message.charAt(0)==="{") last = m; }catch(e){} });
+        if (last) { var st = JSON.parse(last.message); if (!status || st.t >= status.t) status = st; }
+        statusErr = ""; lastStatusFetch = Date.now(); render();
+      })
+      .catch(function(e){ statusErr = String(e.message||e); render(); });
+  }
+  function fetchPrices(){
+    fetch("https://api.bitvavo.com/v2/ticker/24h", {cache:"no-store"})
+      .then(function(r){ if(!r.ok) throw new Error("Bitvavo HTTP "+r.status); return r.json(); })
+      .then(function(rows){
+        rows.forEach(function(t){ var p=parseFloat(t.last), o=parseFloat(t.open); if(p>0){ prices[t.market]=p; changes[t.market]= o>0 ? (p/o-1)*100 : null; } });
+        $("pErr").textContent = ""; render();
+      })
+      .catch(function(e){ $("pErr").textContent = "Kurse gerade nicht erreichbar: " + (e.message||e); });
+  }
+
+  // ---------- Anzeige
+  function render(){
+    var hero=$("hero"), T=$("heroT"), S=$("heroS");
+    if (!KANAL) { $("setup").style.display="block"; hero.className="hero wait"; T.textContent="Noch nicht eingerichtet"; S.textContent="Status-Kanal eintragen"; return; }
+    if (!status) {
+      hero.className="hero off"; T.textContent = "Bot inaktiv – PC aus oder Monitor gestoppt";
+      S.textContent = statusErr ? "Status nicht abrufbar: "+statusErr : "In den letzten 12 Stunden kam kein Lebenszeichen vom Bot.";
+    } else {
+      var limit = Math.max(25, (status.status_min||10)*2.5) * 60000, age = Date.now()-status.t;
+      if (status.gestoppt) { hero.className="hero off"; T.textContent="Bot gestoppt – Monitor wurde beendet"; S.textContent="Beendet "+ago(status.t)+" ("+hm(status.t)+" Uhr)"; }
+      else if (age > limit) { hero.className="hero off"; T.textContent="Bot inaktiv – PC aus oder Monitor gestoppt"; S.textContent="Letztes Lebenszeichen "+ago(status.t)+" ("+hm(status.t)+" Uhr)"; }
+      else { hero.className="hero ok"; T.textContent = status.aktiv ? "Bot aktiv – überwacht den Markt" : "Bot läuft – nur Meldungen, Handel ist aus";
+        S.textContent = "Lebenszeichen "+ago(status.t)+" · beobachtet "+(status.maerkte||[]).length+" Coins auf "+(status.intervall||"15m")+"-Kerzen"+(status.runden?" · "+status.runden+" Runden seit Start":""); }
+      if (status.fehler) S.textContent += " · Hinweis: " + status.fehler;
+    }
+    if (!status) return;
+
+    $("kHandel").innerHTML = status.aktiv ? '<span class="pill g">AN</span>' : '<span class="pill r">AUS</span>';
+    $("kEur").textContent = status.eur==null ? "–" : eur(status.eur);
+    var j = status.j || {};
+    $("kHeute").innerHTML = '<span class="'+cls(j.heute)+'">'+sgn(j.heute,2)+' €</span>';
+    $("kGes").innerHTML = '<span class="'+cls(j.gesamt)+'">'+sgn(j.gesamt,2)+' €</span> <small style="color:var(--mut);font-size:12px">('+(j.n||0)+' Trades)</small>';
+
+    // Position
+    var P = status.pos||[];
+    $("pos").innerHTML = P.length ? P.map(function(p){
+      var live = prices[p.m], menge = parseFloat(p.menge), wert = live ? live*menge*(1-0.0025) : null, pl = wert!=null ? wert - p.k : null;
+      var lo = p.st, hi = p.z, pos = live ? Math.min(100,Math.max(0,(live-lo)/(hi-lo)*100)) : null, ep = (p.e-lo)/(hi-lo)*100;
+      return '<div><div class="row"><div><b>'+esc(p.m)+'</b> <span class="pill b">offen</span></div><div class="big '+cls(pl)+'">'+(pl==null?"–":sgn(pl,2)+" €")+'</div></div>'+
+        '<div class="row" style="color:var(--mut);font-size:13px"><span>'+esc(p.menge)+' · Einstieg '+pr(p.e)+' · jetzt '+(live?pr(live):"–")+'</span><span>'+(pl==null?"":sgn(pl/p.k*100,1)+" %")+'</span></div>'+
+        '<div class="bar"><div class="e" style="left:'+ep+'%"></div>'+(pos==null?"":'<div class="m" style="left:calc('+pos+'% - 1px)"></div>')+'</div>'+
+        '<div class="barl"><span>Stop '+pr(lo)+'</span><span>Ziel '+pr(hi)+'</span></div>'+
+        '<div style="color:var(--mut);font-size:13px;margin-top:6px">Gekauft '+hm(p.seit)+' Uhr · verkauft spätestens in '+left(p.dl)+'</div></div>';
+    }).join("") : '<div class="empty">Keine offene Position.</div>';
+
+    // Vorschlaege
+    var aktivJetzt = !status.gestoppt && (Date.now()-status.t) <= Math.max(25,(status.status_min||10)*2.5)*60000;
+    var V = aktivJetzt ? (status.vor||[]).filter(function(v){ return v.bis > Date.now(); }) : [];
+    $("vor").innerHTML = V.length ? V.map(function(v){
+      return '<div class="row"><div><b>'+esc(v.m)+'</b> · '+(SETUPS[v.s]||esc(v.s))+'</div><div><span class="pill y">noch '+left(v.bis)+'</span></div></div>'+
+        '<div style="color:var(--mut);font-size:13px">Drück auf dem Handy KAUFEN, dann kauft der Bot selbst.</div>';
+    }).join("") : '<div class="empty">'+(aktivJetzt ? 'Kein Kaufvorschlag offen.' : 'Bot ist aus – solange kommen keine Kaufvorschläge.')+'</div>';
+
+    // Signale
+    var G = (status.sig||[]).slice().reverse();
+    $("sig").innerHTML = G.length ? '<table><tr><th>Zeit</th><th>Coin</th><th class="hide-s">Setup</th><th>Check</th><th class="r">seit Signal</th></tr>'+
+      G.map(function(s){ var live=prices[s.m], ch = live ? (live/s.e-1)*100 : null;
+        return '<tr><td>'+hm(s.t+900000)+'</td><td><b>'+esc(s.m.replace("-EUR",""))+'</b></td><td class="hide-s">'+(SETUPS[s.s]||esc(s.s))+'</td><td>'+
+          (s.r==="PASS"?'<span class="pill g">PASS</span>':'<span class="pill r">BLOCK</span>')+'</td><td class="r '+cls(ch)+'">'+(ch==null?"–":sgn(ch,2)+" %")+'</td></tr>'; }).join("")+'</table>'
+      : '<div class="empty">Noch keine Signale.</div>';
+
+    // Kurse
+    var M = ["BTC-EUR","ETH-EUR"]; P.forEach(function(p){ if(M.indexOf(p.m)<0) M.push(p.m); });
+    (status.maerkte||[]).forEach(function(b){ var m=b+"-EUR"; if(M.indexOf(m)<0 && M.length<14) M.push(m); });
+    if (Object.keys(prices).length) $("tick").innerHTML = M.filter(function(m){return prices[m];}).map(function(m){
+      var c=changes[m]; return '<span><b>'+m.replace("-EUR","")+'</b> '+pr(prices[m])+' <span class="'+cls(c)+'">'+(c==null?"":sgn(c,1)+"%")+'</span></span>'; }).join("");
+
+    // Trades
+    var L = (j.letzte||[]).slice().reverse();
+    $("trades").innerHTML = L.length ? '<table><tr><th>Datum</th><th>Coin</th><th class="hide-s">Grund</th><th class="r">Ergebnis</th></tr>'+
+      L.map(function(t){ return '<tr><td>'+esc(t.d.slice(8,10)+"."+t.d.slice(5,7)+". "+t.z)+'</td><td>'+esc(t.m.replace("-EUR",""))+'</td><td class="hide-s">'+esc(t.n)+'</td><td class="r '+cls(t.r)+'">'+sgn(t.r,2)+' €</td></tr>'; }).join("")+'</table>'
+      : '<div class="empty">Noch keine Trades.</div>';
+  }
+
+  $("save").addEventListener("click", function(){ var v=$("kanal").value.trim(); if(!/^[A-Za-z0-9_-]{8,}$/.test(v)) return; KANAL=v; store(LS,v); $("setup").style.display="none"; fetchStatus(); });
+  setInterval(function(){ $("clock").textContent = new Date().toLocaleTimeString("de-DE"); render(); }, 1000);
+  setInterval(fetchStatus, 20000);
+  setInterval(fetchPrices, 10000);
+  fetchStatus(); fetchPrices(); render();
+})();
+</script>
+</body>
+</html>
