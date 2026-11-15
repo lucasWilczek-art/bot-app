@@ -56,6 +56,27 @@
   .setup{display:none}
   .setup input{width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);background:#0b0e12;color:var(--txt);font:inherit}
   .setup button{margin-top:8px;padding:9px 14px;border-radius:8px;border:0;background:var(--bl);color:#fff;font-weight:600;cursor:pointer}
+  .bots{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;counter-reset:b}
+  .bot{position:relative;background:#11161c;border:1px solid var(--line);border-radius:10px;padding:10px 10px 9px 12px;transition:border-color .4s,box-shadow .4s}
+  .bot .hd{display:flex;align-items:center;gap:7px}
+  .bot .no{font-size:11px;color:var(--mut);width:18px;height:18px;border-radius:50%;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;flex:none}
+  .bot .nm{font-weight:650;font-size:14px}
+  .bot .st{margin-left:auto;width:9px;height:9px;border-radius:50%;background:#3a424d;flex:none}
+  .bot.work .st{background:var(--gr);animation:p 1.6s infinite} .bot.ready .st{background:var(--bl)} .bot.off .st{background:#3a424d}
+  .bot .rl{color:var(--mut);font-size:12px;margin:2px 0 6px}
+  .bot .tx{font-size:13px;min-height:34px;color:#c9d1d9;word-break:break-word}
+  .bot .ft{display:flex;justify-content:space-between;color:var(--mut);font-size:11px;margin-top:4px}
+  .bot.flash{border-color:var(--gr);box-shadow:0 0 0 2px rgba(47,191,113,.25)}
+  .bot.flash-in{border-color:var(--bl);box-shadow:0 0 0 2px rgba(76,154,255,.25)}
+  .bot:not(:last-child)::after{content:"→";position:absolute;right:-8px;top:50%;transform:translateY(-50%);color:var(--mut);font-size:12px;background:var(--bg);line-height:1;padding:1px 0;z-index:1}
+  .chat{display:flex;flex-direction:column;gap:6px}
+  .msg{display:grid;grid-template-columns:44px 1fr;gap:8px;font-size:13px;padding:7px 9px;border-radius:9px;background:#11161c;border:1px solid var(--line)}
+  .msg .tm{color:var(--mut);font-variant-numeric:tabular-nums}
+  .msg .wh{font-weight:650}
+  .msg .wh .to{color:var(--bl)}
+  .msg.new{animation:nw 2.5s ease-out}
+  @keyframes nw{0%{background:rgba(47,191,113,.22)}100%{background:#11161c}}
+  .sub{color:var(--mut);font-size:12px;font-weight:400;text-transform:none;letter-spacing:0;margin-left:6px}
   footer{color:var(--mut);font-size:12px;margin:18px 0 6px;line-height:1.6}
   .err{color:var(--rd);font-size:13px;margin-top:6px}
   @media (max-width:560px){.hide-s{display:none}.kpi .v{font-size:18px}}
@@ -83,6 +104,10 @@
     <div class="kpi"><div class="l">Ergebnis heute</div><div class="v" id="kHeute">–</div></div>
     <div class="kpi"><div class="l">Ergebnis gesamt</div><div class="v" id="kGes">–</div></div>
   </div>
+
+  <div class="card"><h2>Die 11 Bots <span class="sub" id="botsSub"></span></h2><div class="bots" id="bots"></div></div>
+
+  <div class="card"><h2>So sprechen die Bots miteinander <span class="sub">neueste oben</span></h2><div class="chat" id="chat"><div class="empty">Noch keine Nachrichten.</div></div></div>
 
   <div class="card"><h2>Offene Position</h2><div id="pos" class="posbox"><div class="empty">Keine offene Position.</div></div></div>
 
@@ -149,6 +174,43 @@
       .catch(function(e){ $("pErr").textContent = "Kurse gerade nicht erreichbar: " + (e.message||e); });
   }
 
+  var MOD = [
+    ["markt","Markt-Wähler","sucht die umsatzstärksten Coins"],
+    ["scan","Scanner","prüft jede Minute alle Coins auf 3 Setups"],
+    ["plan","Planer","legt Einstieg, Stop und Ziel fest"],
+    ["sim","Zeitmaschine","spielt den Trade 2000-mal durch"],
+    ["size","Budget","rechnet aus, wie viel gekauft wird"],
+    ["risk","Risiko-Wächter","PASS oder BLOCK nach deinen Limits"],
+    ["melder","Melder","schickt Meldungen aufs Handy"],
+    ["best","Bestätigung","wartet auf deinen KAUFEN-Knopf"],
+    ["haendler","Händler","kauft und setzt den Stop-Loss"],
+    ["pos","Positions-Wächter","verkauft am Ziel oder nach 24 h"],
+    ["bericht","Alarm & Bericht","Journal, Alarme, Tagesbericht"]];
+  var NAME = {}; MOD.forEach(function(m){ NAME[m[0]] = m[1]; });
+  var seenFeed = 0, flashUntil = {};
+  function renderBots(alive){
+    var mod = status.mod || {}, now = Date.now();
+    $("botsSub").textContent = alive ? "Stand vom letzten Lebenszeichen ("+ago(status.t)+")" : "alle pausiert – Bot ist aus";
+    var feed = status.feed || [], newest = 0;
+    feed.forEach(function(f){ if (f.t > seenFeed) { if (seenFeed) { flashUntil[f.a] = {u: now+4000, c:"flash"}; if (f.b) flashUntil[f.b] = {u: now+4000, c:"flash-in"}; } } newest = Math.max(newest, f.t); });
+    var firstRender = !seenFeed; 
+    $("bots").innerHTML = MOD.map(function(m, i){
+      var d = mod[m[0]] || {}, age = d.t ? status.t - d.t : null, c = "off";
+      if (alive && d.t) c = (age <= 3*60000) ? "work" : "ready";
+      var fl = flashUntil[m[0]] && flashUntil[m[0]].u > now ? " "+flashUntil[m[0]].c : "";
+      var lab = !alive ? "pausiert" : !d.t ? "noch nichts" : c==="work" ? "arbeitet" : "bereit";
+      return '<div class="bot '+c+fl+'"><div class="hd"><span class="no">'+(i+1)+'</span><span class="nm">'+m[1]+'</span><span class="st" title="'+lab+'"></span></div>'+
+        '<div class="rl">'+m[2]+'</div><div class="tx">'+(d.x?esc(d.x):'<span style="color:var(--mut)">–</span>')+'</div>'+
+        '<div class="ft"><span>'+lab+(d.t?" · "+hm(d.t):"")+'</span><span>'+(d.n?d.n+"× heute":"")+'</span></div></div>';
+    }).join("");
+    var F = feed.slice().reverse();
+    $("chat").innerHTML = F.length ? F.map(function(f){
+      var isNew = !firstRender && f.t > seenFeed;
+      return '<div class="msg'+(isNew?" new":"")+'"><span class="tm">'+hm(f.t)+'</span><div><div class="wh">'+(NAME[f.a]||esc(f.a))+
+        (f.b?' <span style="color:var(--mut)">→</span> <span class="to">'+(NAME[f.b]||esc(f.b))+'</span>':'')+'</div><div>'+esc(f.x)+'</div></div></div>';
+    }).join("") : '<div class="empty">Noch keine Nachrichten – sie erscheinen, sobald der Scanner etwas findet.</div>';
+    if (newest > seenFeed) seenFeed = newest;
+  }
   // ---------- Anzeige
   function render(){
     var hero=$("hero"), T=$("heroT"), S=$("heroS");
@@ -165,6 +227,8 @@
       if (status.fehler) S.textContent += " · Hinweis: " + status.fehler;
     }
     if (!status) return;
+    var aliveNow = !status.gestoppt && (Date.now()-status.t) <= Math.max(25,(status.status_min||10)*2.5)*60000;
+    renderBots(aliveNow);
 
     $("kHandel").innerHTML = status.aktiv ? '<span class="pill g">AN</span>' : '<span class="pill r">AUS</span>';
     $("kEur").textContent = status.eur==null ? "–" : eur(status.eur);
