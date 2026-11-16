@@ -119,7 +119,9 @@
 
   <div class="card"><h2>Offene Position</h2><div id="pos" class="posbox"><div class="empty">Keine offene Position.</div></div></div>
 
-  <div class="card"><h2>Die 11 Bots <span class="sub" id="botsSub"></span></h2><div class="bots" id="bots"></div></div>
+  <div class="card"><h2>Was der Lern-Bot gelernt hat <span class="sub" id="lernSub"></span></h2><div id="lern"><div class="empty">Der Lern-Bot lernt einmal pro Stunde – die erste Runde kommt gleich.</div></div></div>
+
+  <div class="card"><h2>Die 12 Bots <span class="sub" id="botsSub"></span></h2><div class="bots" id="bots"></div></div>
 
   <div class="card"><h2>So sprechen die Bots miteinander <span class="sub">neueste oben</span></h2><div class="chat" id="chat"><div class="empty">Noch keine Nachrichten.</div></div></div>
 
@@ -200,7 +202,8 @@
     ["best","Bestätigung","wartet auf deinen KAUFEN-Knopf"],
     ["haendler","Händler","kauft und setzt den Stop-Loss"],
     ["pos","Positions-Wächter","verkauft am Ziel oder nach 24 h"],
-    ["bericht","Alarm & Bericht","Journal, Alarme, Tagesbericht"]];
+    ["bericht","Alarm & Bericht","Journal, Alarme, Tagesbericht"],
+    ["lern","Lern-Bot","lernt aus jedem Ergebnis, stündlich"]];
   var NAME = {}; MOD.forEach(function(m){ NAME[m[0]] = m[1]; });
   var seenFeed = 0, flashUntil = {};
   function renderBots(alive){
@@ -246,6 +249,17 @@
     return '<button class="btn '+cls+(a?" armed":"")+'" data-cmd="'+esc(cmd)+'" data-label="'+esc(label)+'"'+(dis?" disabled":"")+'>'+(a?"Sicher? Nochmal tippen":text)+'</button>';
   }
 
+  function renderLern(){
+    var L = status.lern; if (!L || !L.stand) return;
+    $("lernSub").textContent = "Stand "+hm(L.stand)+" Uhr · aus "+L.n+" Signalen";
+    var rows = Object.keys(L.s||{}).map(function(k){ var v=L.s[k];
+      return '<tr><td><b>'+(SETUPS[k]||esc(k))+'</b></td><td>'+(v[0]==="gesperrt"?'<span class="pill r">GESPERRT</span>':'<span class="pill g">AKTIV</span>')+
+        '</td><td class="r">'+v[1]+'</td><td class="r '+cls(v[2])+'">'+(v[1]?sgn(v[2],2)+" %":"–")+'</td><td class="r hide-s">'+v[3]+' / '+v[4]+'</td></tr>'; }).join("");
+    $("lern").innerHTML = '<table><tr><th>Setup</th><th>Status</th><th class="r">Signale</th><th class="r">Schnitt/Trade</th><th class="r hide-s">Stop ATR / Ziel R</th></tr>'+rows+'</table>'+
+      '<div class="note">Die Zeitmaschine trifft in Wirklichkeit '+Math.round((L.f||1)*100)+' % so oft wie vorhergesagt – der Lern-Bot rechnet damit. '+
+      (L.c ? L.c+' Coin(s) gesperrt. ' : '')+'Gekauft wird nur, wenn der Erwartungswert nach Gebühren positiv ist.</div>'+
+      ((L.a||[]).length ? '<div class="chat" style="margin-top:8px">'+L.a.slice().reverse().map(function(x){ return '<div class="msg"><span class="tm">neu</span><div>'+esc(x)+'</div></div>'; }).join("")+'</div>' : '');
+  }
   // ---------- Anzeige
   function render(){
     var hero=$("hero"), T=$("heroT"), S=$("heroS");
@@ -266,7 +280,7 @@
     }
     if (!status) return;
     var aliveNow = !status.gestoppt && (Date.now()-status.t) <= Math.max(25,(status.status_min||10)*2.5)*60000;
-    renderBots(aliveNow);
+    renderBots(aliveNow); renderLern();
 
     $("kHandel").innerHTML = status.aktiv ? '<span class="pill g">AN</span>' : '<span class="pill r">AUS</span>';
     if (!ANTWORT) {
