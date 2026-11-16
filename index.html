@@ -286,10 +286,15 @@
     if (!ANTWORT) {
       $("ctl").innerHTML = ""; $("ctlNote").textContent = "Für die Knöpfe den neuen Link aus dem Chat einmal öffnen.";
     } else {
-      $("ctl").innerHTML = status.aktiv ? btn("AUS","stop","Alles ausschalten","Ausschalten") +
+      $("ctl").innerHTML = (status.aktiv ? btn("AUS","stop","Alles ausschalten","Ausschalten") +
           '<span style="color:var(--mut);font-size:13px">Bot kauft dann nichts mehr. Offene Käufe behalten ihren Stop-Loss.</span>'
         : btn("AN","go","Handel wieder einschalten","Einschalten") +
-          '<span style="color:var(--mut);font-size:13px">Handel ist aus – der Bot meldet nur noch.</span>';
+          '<span style="color:var(--mut);font-size:13px">Handel ist aus – der Bot meldet nur noch.</span>') +
+        '<div style="flex-basis:100%;height:0"></div>' +
+        (status.auto ? '<span class="pill g">AUTOMATIK AN</span>' + btn("AUTO-AUS","neutral","Automatik aus","Automatik aus") +
+          '<span style="color:var(--mut);font-size:13px">Kauft bewiesene Setups selbst, alles andere fragt er dich.</span>'
+        : '<span class="pill r">AUTOMATIK AUS</span>' + btn("AUTO-AN","go","Automatik ein","Automatik ein") +
+          '<span style="color:var(--mut);font-size:13px">Kauft nur nach deinem KAUFEN-Knopf.</span>');
       $("ctlNote").innerHTML = (sentUntil > Date.now() ? '<span class="ok">'+esc(sentMsg)+'</span> ' : '') +
         (aliveNow ? "" : "Bot ist gerade aus – der Befehl wird ausgeführt, sobald der PC wieder läuft.");
     }
