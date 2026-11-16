@@ -86,6 +86,9 @@
   .note{color:var(--mut);font-size:12px;margin-top:8px}
   .ok{color:var(--gr)}
   footer{color:var(--mut);font-size:12px;margin:18px 0 6px;line-height:1.6}
+  .msg.bad{border-color:rgba(201,60,55,.6)} .msg.bad .wh{color:#ff7b72}
+  .msg.good{border-color:rgba(47,191,113,.6)} .msg.good .wh{color:var(--gr)}
+  .sx{display:block;font-size:11px;color:var(--mut);margin-top:2px}
   .err{color:var(--rd);font-size:13px;margin-top:6px}
   @media (max-width:560px){.hide-s{display:none}.kpi .v{font-size:18px}}
 </style>
@@ -112,6 +115,8 @@
     <div class="kpi"><div class="l">Ergebnis heute</div><div class="v" id="kHeute">–</div></div>
     <div class="kpi"><div class="l">Ergebnis gesamt</div><div class="v" id="kGes">–</div></div>
   </div>
+
+  <div class="card"><h2>Letzte Meldungen <span class="sub">neueste oben</span></h2><div class="chat" id="meld"><div class="empty">Noch keine Meldungen.</div></div></div>
 
   <div class="card"><h2>Steuerung</h2><div class="ctl" id="ctl"></div><div class="note" id="ctlNote"></div></div>
 
@@ -193,7 +198,7 @@
 
   var MOD = [
     ["markt","Markt-Wähler","sucht die umsatzstärksten Coins"],
-    ["scan","Scanner","prüft jede Minute alle Coins auf 3 Setups"],
+    ["scan","Scanner","prüft alle Coins, sofort nach jedem 15-Min-Schluss"],
     ["plan","Planer","legt Einstieg, Stop und Ziel fest"],
     ["sim","Zeitmaschine","spielt den Trade 2000-mal durch"],
     ["size","Budget","rechnet aus, wie viel gekauft wird"],
@@ -201,7 +206,7 @@
     ["melder","Melder","schickt Meldungen aufs Handy"],
     ["best","Bestätigung","wartet auf deinen KAUFEN-Knopf"],
     ["haendler","Händler","kauft und setzt den Stop-Loss"],
-    ["pos","Positions-Wächter","verkauft am Ziel oder nach 24 h"],
+    ["pos","Positions-Wächter","prüft alle 2 s, verkauft am Ziel oder nach 24 h"],
     ["bericht","Alarm & Bericht","Journal, Alarme, Tagesbericht"],
     ["lern","Lern-Bot","lernt aus jedem Ergebnis, stündlich"]];
   var NAME = {}; MOD.forEach(function(m){ NAME[m[0]] = m[1]; });
@@ -234,7 +239,7 @@
   function send(cmd, label){
     if (!ANTWORT) return;
     fetch(SERVER.replace(/\/$/,"") + "/" + encodeURIComponent(ANTWORT), {method:"POST", body:cmd})
-      .then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); sentMsg = "✓ "+label+" gesendet – der Bot führt es in ca. 1 Minute aus, die App zeigt es 1–2 Minuten später."; sentUntil = Date.now()+180000; render(); })
+      .then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); sentMsg = "✓ "+label+" gesendet – der Bot führt es in wenigen Sekunden aus, die App zeigt das Ergebnis gleich danach."; sentUntil = Date.now()+180000; render(); })
       .catch(function(e){ sentMsg = "Senden fehlgeschlagen: "+(e.message||e); sentUntil = Date.now()+30000; render(); });
   }
   document.addEventListener("click", function(e){
@@ -281,6 +286,13 @@
     if (!status) return;
     var aliveNow = !status.gestoppt && (Date.now()-status.t) <= Math.max(25,(status.status_min||10)*2.5)*60000;
     renderBots(aliveNow); renderLern();
+
+    var MS = (status.msg||[]).slice().reverse();
+    $("meld").innerHTML = MS.length ? MS.map(function(x){
+      var c = /^(Nicht gekauft|Stop-Loss|ACHTUNG|Kauf fehlgeschlagen|Automatischer Kauf fehlgeschlagen|Befehl fehlgeschlagen)/.test(x.ti) ? " bad"
+            : /^(Ziel erreicht|Gekauft|Automatisch gekauft|Verkauf per App)/.test(x.ti) ? " good" : "";
+      return '<div class="msg'+c+'"><span class="tm">'+hm(x.t)+'</span><div><div class="wh">'+esc(x.ti)+'</div><div>'+esc(x.tx)+'</div></div></div>';
+    }).join("") : '<div class="empty">Noch keine Meldungen – hier steht z. B., wenn etwas gekauft, verkauft oder nicht gekauft wurde.</div>';
 
     $("kHandel").innerHTML = status.aktiv ? '<span class="pill g">AN</span>' : '<span class="pill r">AUS</span>';
     if (!ANTWORT) {
@@ -330,7 +342,7 @@
     $("sig").innerHTML = G.length ? '<table><tr><th>Zeit</th><th>Coin</th><th class="hide-s">Setup</th><th>Check</th><th class="r">seit Signal</th></tr>'+
       G.map(function(s){ var live=prices[s.m], ch = live ? (live/s.e-1)*100 : null;
         return '<tr><td>'+hm(s.t+900000)+'</td><td><b>'+esc(s.m.replace("-EUR",""))+'</b></td><td class="hide-s">'+(SETUPS[s.s]||esc(s.s))+'</td><td>'+
-          (s.r==="PASS"?'<span class="pill g">PASS</span>':'<span class="pill r">BLOCK</span>')+'</td><td class="r '+cls(ch)+'">'+(ch==null?"–":sgn(ch,2)+" %")+'</td></tr>'; }).join("")+'</table>'
+          (s.r==="PASS"?'<span class="pill g">PASS</span>':'<span class="pill r">BLOCK</span>')+(s.x?'<span class="sx">'+esc(s.x)+'</span>':'')+'</td><td class="r '+cls(ch)+'">'+(ch==null?"–":sgn(ch,2)+" %")+'</td></tr>'; }).join("")+'</table>'
       : '<div class="empty">Noch keine Signale.</div>';
 
     // Kurse
