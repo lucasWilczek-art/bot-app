@@ -176,7 +176,7 @@
   // ---------- Daten holen
   function fetchStatus(){
     if (!KANAL) return;
-    fetch(SERVER.replace(/\/$/,"") + "/" + encodeURIComponent(KANAL) + "/json?poll=1&since=12h", {cache:"no-store"})
+    fetch(SERVER.replace(/\/$/,"") + "/" + encodeURIComponent(KANAL) + "/json?poll=1&since=latest", {cache:"no-store"})
       .then(function(r){ if(!r.ok) throw new Error("ntfy HTTP "+r.status); return r.text(); })
       .then(function(t){
         var lines = t.split("\n").filter(Boolean), last = null;
@@ -185,6 +185,18 @@
         statusErr = ""; lastStatusFetch = Date.now(); render();
       })
       .catch(function(e){ statusErr = String(e.message||e); render(); });
+  }
+  // Live-Verbindung: neue Lebenszeichen kommen sofort, ohne staendiges Nachfragen (schont das ntfy-Limit)
+  var sseOk = false, es = null;
+  function startLive(){
+    if (!KANAL || !window.EventSource || es) return;
+    es = new EventSource(SERVER.replace(/\/$/,"") + "/" + encodeURIComponent(KANAL) + "/sse");
+    es.onopen = function(){ sseOk = true; };
+    es.onerror = function(){ sseOk = false; };
+    es.onmessage = function(ev){
+      try { var m = JSON.parse(ev.data); if (m.event==="message" && m.message && m.message.charAt(0)==="{") {
+        var st = JSON.parse(m.message); if (!status || st.t >= status.t) status = st; statusErr = ""; lastStatusFetch = Date.now(); render(); } } catch(e){}
+    };
   }
   function fetchPrices(){
     fetch("https://api.bitvavo.com/v2/ticker/24h", {cache:"no-store"})
@@ -358,11 +370,12 @@
       : '<div class="empty">Noch keine Trades.</div>';
   }
 
-  $("save").addEventListener("click", function(){ var v=$("kanal").value.trim(); if(!/^[A-Za-z0-9_-]{8,}$/.test(v)) return; KANAL=v; store(LS,v); $("setup").style.display="none"; fetchStatus(); });
+  $("save").addEventListener("click", function(){ var v=$("kanal").value.trim(); if(!/^[A-Za-z0-9_-]{8,}$/.test(v)) return; KANAL=v; store(LS,v); $("setup").style.display="none"; fetchStatus(); startLive(); });
   setInterval(function(){ $("clock").textContent = new Date().toLocaleTimeString("de-DE"); render(); }, 1000);
-  setInterval(fetchStatus, 20000);
-  setInterval(fetchPrices, 10000);
-  fetchStatus(); fetchPrices(); render();
+  setInterval(function(){ if (!document.hidden && (!sseOk || Date.now()-lastStatusFetch > 15*60000)) fetchStatus(); }, 30000);
+  document.addEventListener("visibilitychange", function(){ if (!document.hidden) { fetchStatus(); fetchPrices(); } });
+  setInterval(function(){ if (!document.hidden) fetchPrices(); }, 10000);
+  fetchStatus(); fetchPrices(); startLive(); render();
 })();
 </script>
 </body>
