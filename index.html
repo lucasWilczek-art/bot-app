@@ -184,11 +184,19 @@
       .then(function(r){ if(!r.ok) throw new Error("ntfy HTTP "+r.status); return r.text(); })
       .then(function(t){
         var lines = t.split("\n").filter(Boolean), last = null;
-        lines.forEach(function(l){ try{ var m = JSON.parse(l); if (m.event==="message" && m.message && m.message.charAt(0)==="{") last = m; }catch(e){} });
-        if (last) { var st = JSON.parse(last.message); if (!status || st.t >= status.t) status = st; }
+        lines.forEach(function(l){ try{ var m = JSON.parse(l); if (m.event==="message" && ((m.message && m.message.charAt(0)==="{") || anhang(m))) last = m; }catch(e){} });
+        if (last && anhang(last)) ladeAnhang(last);
+        else if (last) { var st = JSON.parse(last.message); if (!status || st.t >= status.t) status = st; }
         statusErr = ""; lastStatusFetch = Date.now(); render();
       })
       .catch(function(e){ statusErr = String(e.message||e); render(); });
+  }
+  // Zu grosse Lebenszeichen legt ntfy als Datei-Anhang ab - dann den Anhang laden
+  function anhang(m){ return m.attachment && /json/.test(m.attachment.type||m.attachment.name||"") && m.attachment.url; }
+  function ladeAnhang(m){
+    fetch(m.attachment.url, {cache:"no-store"}).then(function(r){ return r.json(); })
+      .then(function(st){ if (!status || st.t >= status.t) status = st; statusErr = ""; lastStatusFetch = Date.now(); render(); })
+      .catch(function(){});
   }
   // Live-Verbindung: neue Lebenszeichen kommen sofort, ohne staendiges Nachfragen (schont das ntfy-Limit)
   var sseOk = false, es = null, live = false;
@@ -198,7 +206,8 @@
     es.onopen = function(){ sseOk = live = true; };
     es.onerror = function(){ sseOk = live = false; };
     es.onmessage = function(ev){
-      try { var m = JSON.parse(ev.data); if (m.event==="message" && m.message && m.message.charAt(0)==="{") {
+      try { var m = JSON.parse(ev.data); if (m.event==="message" && anhang(m)) { ladeAnhang(m); return; }
+        if (m.event==="message" && m.message && m.message.charAt(0)==="{") {
         var st = JSON.parse(m.message); if (!status || st.t >= status.t) status = st; statusErr = ""; lastStatusFetch = Date.now(); render(); } } catch(e){}
     };
   }
