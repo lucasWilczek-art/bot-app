@@ -111,7 +111,7 @@
 
   <div class="grid">
     <div class="kpi"><div class="l">Handel</div><div class="v" id="kHandel">–</div></div>
-    <div class="kpi"><div class="l">EUR auf Bitvavo</div><div class="v" id="kEur">–</div></div>
+    <div class="kpi"><div class="l">Guthaben (live)</div><div class="v" id="kEur">–</div></div>
     <div class="kpi"><div class="l">Ergebnis heute</div><div class="v" id="kHeute">–</div></div>
     <div class="kpi"><div class="l">Ergebnis gesamt</div><div class="v" id="kGes">–</div></div>
   </div>
@@ -122,11 +122,13 @@
 
   <div class="card"><h2>Wartet auf deine Bestätigung</h2><div id="vor"><div class="empty">Kein Kaufvorschlag offen.</div></div></div>
 
+  <div class="card"><h2>Trend-Bot · Tageschart <span class="sub" id="trSub"></span></h2><div id="trend"><div class="empty">Lade Tageskerzen …</div></div></div>
+
   <div class="card"><h2>Offene Position</h2><div id="pos" class="posbox"><div class="empty">Keine offene Position.</div></div></div>
 
   <div class="card"><h2>Was der Lern-Bot gelernt hat <span class="sub" id="lernSub"></span></h2><div id="lern"><div class="empty">Der Lern-Bot lernt einmal pro Stunde – die erste Runde kommt gleich.</div></div></div>
 
-  <div class="card"><h2>Die 12 Bots <span class="sub" id="botsSub"></span></h2><div class="bots" id="bots"></div></div>
+  <div class="card"><h2>Die <span id="botsN">13</span> Bots <span class="sub" id="botsSub"></span></h2><div class="bots" id="bots"></div></div>
 
   <div class="card"><h2>So sprechen die Bots miteinander <span class="sub">neueste oben</span></h2><div class="chat" id="chat"><div class="empty">Noch keine Nachrichten.</div></div></div>
 
@@ -187,16 +189,58 @@
       .catch(function(e){ statusErr = String(e.message||e); render(); });
   }
   // Live-Verbindung: neue Lebenszeichen kommen sofort, ohne staendiges Nachfragen (schont das ntfy-Limit)
-  var sseOk = false, es = null;
+  var sseOk = false, es = null, live = false;
   function startLive(){
     if (!KANAL || !window.EventSource || es) return;
     es = new EventSource(SERVER.replace(/\/$/,"") + "/" + encodeURIComponent(KANAL) + "/sse");
-    es.onopen = function(){ sseOk = true; };
-    es.onerror = function(){ sseOk = false; };
+    es.onopen = function(){ sseOk = live = true; };
+    es.onerror = function(){ sseOk = live = false; };
     es.onmessage = function(ev){
       try { var m = JSON.parse(ev.data); if (m.event==="message" && m.message && m.message.charAt(0)==="{") {
         var st = JSON.parse(m.message); if (!status || st.t >= status.t) status = st; statusErr = ""; lastStatusFetch = Date.now(); render(); } } catch(e){}
     };
+  }
+  // ---------- Trend live: Tageskerzen direkt von Bitvavo, Schnitt + Abstand zum Live-Kurs
+  var daily = {}, lastDaily = 0;
+  function fetchDaily(){
+    var mk = (status && status.tr && status.tr.length) ? status.tr.map(function(x){return x.m;}) : ["BTC-EUR","ETH-EUR"];
+    var n = (status && status.tr_sma) || 50;
+    lastDaily = Date.now();
+    mk.forEach(function(m){
+      fetch("https://api.bitvavo.com/v2/"+m+"/candles?interval=1d&limit="+(n+3), {cache:"no-store"})
+        .then(function(r){ return r.json(); })
+        .then(function(rows){
+          rows.sort(function(a,b){return a[0]-b[0];});
+          if (rows.length && rows[rows.length-1][0] + 86400000 > Date.now()) rows = rows.slice(0,-1);   // laufende Kerze weg
+          var c = rows.map(function(r){return parseFloat(r[4]);}).slice(-n);
+          if (c.length < n) return;
+          daily[m] = {s: c.reduce(function(a,b){return a+b;},0)/n, last: c[c.length-1]};
+          render();
+        }).catch(function(){});
+    });
+  }
+  function trendLive(m){
+    var d = daily[m]; if (!d) return null;
+    var live = prices[m] || d.last;
+    return {m:m, s:d.s, k:live, last:d.last, ok:d.last > d.s, a:(live/d.s-1)*100};
+  }
+  function renderTrend(){
+    var mk = (status.tr && status.tr.length) ? status.tr.map(function(x){return x.m;}) : ["BTC-EUR","ETH-EUR"];
+    var n = status.tr_sma || 50;
+    if (status.tr_an === false) { $("trend").innerHTML = '<div class="empty">Trend-Bot ist ausgeschaltet.</div>'; return; }
+    var next = new Date(); next.setUTCHours(24,0,0,0);
+    $("trSub").textContent = "nächster Tagesschluss "+hm(next.getTime())+" Uhr";
+    var rows = mk.map(function(m){
+      var t = trendLive(m); if (!t) return '';
+      var halt = (status.pos||[]).some(function(p){ return p.art==="trend" && p.m===m; });
+      var st = halt ? '<span class="pill b">GEKAUFT</span>' : t.ok ? '<span class="pill g">AUFWÄRTS</span>' : '<span class="pill r">ABWÄRTS</span>';
+      return '<tr><td><b>'+m.replace("-EUR","")+'</b></td><td>'+st+'</td><td class="r">'+pr(t.k)+'</td><td class="r hide-s">'+pr(t.s)+'</td><td class="r '+cls(t.a)+'">'+sgn(t.a,1)+' %</td></tr>';
+    }).join("");
+    if (!rows) return;
+    var any = mk.some(function(m){ var t=trendLive(m); return t && t.ok; });
+    $("trend").innerHTML = '<table><tr><th>Coin</th><th>Trend</th><th class="r">Kurs live</th><th class="r hide-s">'+n+'-Tage-Schnitt</th><th class="r">Abstand</th></tr>'+rows+'</table>'+
+      '<div class="note">'+(any ? 'Aufwärtstrend: Der Bot kauft automatisch mit dem freien Guthaben (wenn Handel + Automatik AN sind).'
+        : 'Gerade Abwärtstrend – der Bot wartet. Er kauft automatisch, sobald ein Tagesschluss (01:00 Uhr) über dem Schnitt liegt, und verkauft, wenn einer darunter fällt. Im Backtest 2022–2026 nach Gebühren: BTC ×2,75, ETH ×2,45.')+'</div>';
   }
   function fetchPrices(){
     fetch("https://api.bitvavo.com/v2/ticker/24h", {cache:"no-store"})
@@ -220,7 +264,8 @@
     ["haendler","Händler","kauft und setzt den Stop-Loss"],
     ["pos","Positions-Wächter","prüft alle 2 s, verkauft am Ziel oder nach 24 h"],
     ["bericht","Alarm & Bericht","Journal, Alarme, Tagesbericht"],
-    ["lern","Lern-Bot","lernt aus jedem Ergebnis, stündlich"]];
+    ["lern","Lern-Bot","lernt aus jedem Ergebnis, stündlich"],
+    ["trend","Trend-Bot","kauft BTC/ETH im Aufwärtstrend, verkauft bei Trendende"]];
   var NAME = {}; MOD.forEach(function(m){ NAME[m[0]] = m[1]; });
   var seenFeed = 0, flashUntil = {};
   function renderBots(alive){
@@ -289,15 +334,17 @@
       if (status.gestoppt) { hero.className="hero off"; T.textContent="Bot gestoppt – Monitor wurde beendet"; S.textContent="Beendet "+ago(status.t)+" ("+hm(status.t)+" Uhr)"; }
       else if (age > limit) { hero.className="hero off"; T.textContent="Bot inaktiv – PC aus oder Monitor gestoppt"; S.textContent="Letztes Lebenszeichen "+ago(status.t)+" ("+hm(status.t)+" Uhr)"; }
       else { hero.className="hero ok"; T.textContent = status.aktiv ? "Bot aktiv – überwacht den Markt" : "Bot läuft – nur Meldungen, Handel ist aus";
-        var naechst = status.t + (status.status_min||10)*60000 - Date.now();
-        var runden = (status.runden||0) + Math.max(0, Math.floor((Date.now()-status.t)/((status.takt||60)*1000+15000)));
-        S.textContent = "Prüft jede Minute "+(status.maerkte||[]).length+" Coins · ca. "+runden+" Runden seit Start · letztes Update "+ago(status.t)+
-          (naechst > 0 ? " · nächstes in ca. "+Math.ceil(naechst/60000)+" Min. (bei Signalen sofort)" : " · nächstes Update gleich"); }
+        var naechst = status.t + (status.status_min||15)*60000 - Date.now();
+        var runden = (status.runden||0) + Math.max(0, Math.floor((Date.now()-status.t)/((status.takt||60)*1000+5000)));
+        S.textContent = "Scannt "+(status.maerkte||[]).length+" Coins sofort nach jedem 15-Min-Schluss · Positionen alle 2 s · ca. "+runden+" Runden seit Start · Bot-Daten "+ago(status.t)+
+          (live ? " · Live-Verbindung ✓" : "")+
+          (naechst > 0 ? " · Kurse, Guthaben & Gewinn/Verlust live, Käufe/Verkäufe sofort" : " · nächstes Update gleich"); }
       if (status.fehler) S.textContent += " · Hinweis: " + status.fehler;
     }
     if (!status) return;
     var aliveNow = !status.gestoppt && (Date.now()-status.t) <= Math.max(25,(status.status_min||10)*2.5)*60000;
-    renderBots(aliveNow); renderLern();
+    renderBots(aliveNow); renderLern(); renderTrend();
+    $("botsN").textContent = MOD.length;
 
     var MS = (status.msg||[]).slice().reverse();
     $("meld").innerHTML = MS.length ? MS.map(function(x){
@@ -322,7 +369,11 @@
       $("ctlNote").innerHTML = (sentUntil > Date.now() ? '<span class="ok">'+esc(sentMsg)+'</span> ' : '') +
         (aliveNow ? "" : "Bot ist gerade aus – der Befehl wird ausgeführt, sobald der PC wieder läuft.");
     }
-    $("kEur").textContent = status.eur==null ? "–" : eur(status.eur);
+    var MG = status.mengen, gw = null;
+    if (MG) { gw = 0; Object.keys(MG).forEach(function(k){ gw += k==="EUR" ? MG[k] : (prices[k+"-EUR"]||0)*MG[k]; }); }
+    else if (status.kw != null) gw = status.kw;
+    $("kEur").innerHTML = gw==null ? (status.eur==null ? "–" : eur(status.eur)) :
+      eur(gw)+' <small style="color:var(--mut);font-size:12px">('+eur(status.eur||0)+' frei)</small>';
     var j = status.j || {};
     $("kHeute").innerHTML = '<span class="'+cls(j.heute)+'">'+sgn(j.heute,2)+' €</span>';
     $("kGes").innerHTML = '<span class="'+cls(j.gesamt)+'">'+sgn(j.gesamt,2)+' €</span> <small style="color:var(--mut);font-size:12px">('+(j.n||0)+' Trades)</small>';
@@ -331,12 +382,15 @@
     var P = status.pos||[];
     $("pos").innerHTML = P.length ? P.map(function(p){
       var live = prices[p.m], menge = parseFloat(p.menge), wert = live ? live*menge*(1-0.0025) : null, pl = wert!=null ? wert - p.k : null;
-      var lo = p.st, hi = p.z, pos = live ? Math.min(100,Math.max(0,(live-lo)/(hi-lo)*100)) : null, ep = (p.e-lo)/(hi-lo)*100;
-      return '<div><div class="row"><div><b>'+esc(p.m)+'</b> <span class="pill b">offen</span></div><div class="big '+cls(pl)+'">'+(pl==null?"–":sgn(pl,2)+" €")+'</div></div>'+
+      var tr = p.art === "trend", tl = tr ? trendLive(p.m) : null;
+      var lo = p.st, hi = tr ? Math.max(p.e*1.3, (live||p.e)*1.05) : p.z, pos = live ? Math.min(100,Math.max(0,(live-lo)/(hi-lo)*100)) : null, ep = (p.e-lo)/(hi-lo)*100;
+      return '<div><div class="row"><div><b>'+esc(p.m)+'</b> <span class="pill b">'+(tr?"Trend":"offen")+'</span></div><div class="big '+cls(pl)+'">'+(pl==null?"–":sgn(pl,2)+" €")+'</div></div>'+
         '<div class="row" style="color:var(--mut);font-size:13px"><span>'+esc(p.menge)+' · Einstieg '+pr(p.e)+' · jetzt '+(live?pr(live):"–")+'</span><span>'+(pl==null?"":sgn(pl/p.k*100,1)+" %")+'</span></div>'+
         '<div class="bar"><div class="e" style="left:'+ep+'%"></div>'+(pos==null?"":'<div class="m" style="left:calc('+pos+'% - 1px)"></div>')+'</div>'+
-        '<div class="barl"><span>Stop '+pr(lo)+'</span><span>Ziel '+pr(hi)+'</span></div>'+
-        '<div style="color:var(--mut);font-size:13px;margin-top:6px">Gekauft '+hm(p.seit)+' Uhr · verkauft spätestens in '+left(p.dl)+'</div>'+
+        '<div class="barl"><span>'+(tr?"Not-Stop ":"Stop ")+pr(lo)+'</span><span>'+(tr?"kein festes Ziel – läuft mit dem Trend":"Ziel "+pr(hi))+'</span></div>'+
+        '<div style="color:var(--mut);font-size:13px;margin-top:6px">Gekauft '+hm(p.seit)+' Uhr · '+(tr ?
+          'verkauft automatisch, wenn ein Tagesschluss unter den '+(status.tr_sma||50)+'-Tage-Schnitt'+((tl||p.sma)?' ('+pr(tl?tl.s:p.sma)+')':'')+' fällt'
+          : 'verkauft spätestens in '+left(p.dl))+'</div>'+
         (ANTWORT ? '<div style="margin-top:10px">'+btn("VERKAUF-"+p.seit,"neutral","Jetzt verkaufen","Verkauf "+p.m, !aliveNow)+'</div>' : '')+'</div>';
     }).join("") : '<div class="empty">Keine offene Position.</div>';
 
@@ -374,8 +428,9 @@
   setInterval(function(){ $("clock").textContent = new Date().toLocaleTimeString("de-DE"); render(); }, 1000);
   setInterval(function(){ if (!document.hidden && (!sseOk || Date.now()-lastStatusFetch > 15*60000)) fetchStatus(); }, 30000);
   document.addEventListener("visibilitychange", function(){ if (!document.hidden) { fetchStatus(); fetchPrices(); } });
-  setInterval(function(){ if (!document.hidden) fetchPrices(); }, 10000);
-  fetchStatus(); fetchPrices(); startLive(); render();
+  setInterval(function(){ if (!document.hidden) fetchPrices(); }, 5000);
+  setInterval(function(){ if (!document.hidden && Date.now()-lastDaily > 10*60000) fetchDaily(); }, 30000);
+  fetchStatus(); fetchPrices(); fetchDaily(); startLive(); render();
 })();
 </script>
 </body>
